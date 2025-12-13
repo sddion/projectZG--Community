@@ -62,18 +62,18 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 // Serve static files from 'public' directory
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(process.cwd(), 'public')));
 
 // Explicit root handler for Vercel
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/index.html'));
+    res.sendFile(path.join(process.cwd(), 'public/index.html'));
 });
 
 // Serve auth pages with clean URLs
 const path = require('path');
 
 // Auth Pages (catch all auth-related routes and serve the SPA)
-const authPagePath = path.join(__dirname, 'public/auth/index.html');
+const authPagePath = path.join(process.cwd(), 'public/auth/index.html');
 
 const authHandler = (req, res) => res.sendFile(authPagePath);
 
