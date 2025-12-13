@@ -112,7 +112,11 @@ app.get('/api/debug-paths', (req, res) => {
     });
 });
 
-app.use('/api/auth', require('./api/auth/index'));
+try {
+    app.use('/api/auth', require('./api/auth/index'));
+} catch (error) {
+    console.error('Failed to load Auth API:', error);
+}
 
 
 // Only listen if run directly (local dev), otherwise export for Vercel
