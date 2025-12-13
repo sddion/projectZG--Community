@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
+const path = require('path');
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -70,7 +71,6 @@ app.get('/', (req, res) => {
 });
 
 // Serve auth pages with clean URLs
-const path = require('path');
 
 // Auth Pages (catch all auth-related routes and serve the SPA)
 const authPagePath = path.join(process.cwd(), 'public/auth/index.html');
@@ -85,53 +85,7 @@ app.get([
 ], authHandler);
 
 // API Routes
-app.get('/api/debug-paths', (req, res) => {
-    const fs = require('fs');
-
-    const safeList = (dir) => {
-        try {
-            return fs.readdirSync(dir);
-        } catch (e) {
-            return `Error: ${e.message}`;
-        }
-    };
-
-    const { getSupabaseStatus } = require('./utils/supabaseClient');
-    res.json({
-        cwd: process.cwd(),
-        dirname: __dirname,
-        root_files: safeList(process.cwd()),
-        public_files: safeList(path.join(process.cwd(), 'public')),
-        auth_files_check: safeList(path.join(process.cwd(), 'api/auth')),
-        supabase_status: getSupabaseStatus(),
-        env_check: {
-            NODE_ENV: process.env.NODE_ENV,
-            HAS_URL: !!process.env.SUPABASE_URL,
-            HAS_KEY: !!process.env.SUPABASE_ANON_KEY
-        }
-    });
-});
-
-// Health Check 
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-try {
-    app.use('/api/auth', require('./api/auth/index'));
-} catch (error) {
-    console.error('Failed to load Auth API:', error);
-}
-
-// Global Error Handler - CRITICAL for Vercel debugging
-app.use((err, req, res, next) => {
-    console.error('Unhandled Application Error:', err);
-    res.status(500).json({
-        error: 'Internal Server Error',
-        message: err.message,
-        stack: process.env.NODE_ENV === 'production' ? '🥞' : err.stack
-    });
-});
+app.use('/api/auth', require('./api/auth/index'));
 
 
 // Only listen if run directly (local dev), otherwise export for Vercel

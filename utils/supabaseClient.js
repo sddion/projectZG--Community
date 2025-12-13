@@ -48,13 +48,5 @@ const createAuthenticatedClient = async (token, refreshToken) => {
     return client;
 };
 
-// Diagnostics helper
-const getSupabaseStatus = () => ({
-    ready: !!supabase,
-    error: clientInitError,
-    url_configured: !!supabaseUrl,
-    key_configured: !!supabaseKey
-});
-
-module.exports = { supabase, createAuthenticatedClient, getSupabaseStatus };
+module.exports = { supabase, createAuthenticatedClient };
 
