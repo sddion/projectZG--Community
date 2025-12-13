@@ -4,7 +4,7 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    const API_URL = (typeof Config !== 'undefined') ? Config.API_URL : 'http://localhost:3000/api';
+    const API_URL = (typeof Config !== 'undefined') ? Config.API_URL : '/api';
     const container = document.getElementById('view-auth');
 
     // Access Redux Store and Actions (exposed globally in store.js)
