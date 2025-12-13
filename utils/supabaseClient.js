@@ -4,21 +4,32 @@ const { createClient } = require('@supabase/supabase-js');
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
+let supabase = null;
+let clientInitError = null;
+
 if (!supabaseUrl || !supabaseKey) {
     const missing = [];
     if (!supabaseUrl) missing.push('SUPABASE_URL');
     if (!supabaseKey) missing.push('SUPABASE_ANON_KEY');
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    clientInitError = `Missing required environment variables: ${missing.join(', ')}`;
+    console.error(`CRITICAL: ${clientInitError}`); // Log to Vercel console
+} else {
+    try {
+        supabase = createClient(supabaseUrl, supabaseKey, {
+            auth: {
+                flowType: 'pkce',
+                detectSessionInUrl: false,
+            }
+        });
+    } catch (e) {
+        clientInitError = `Supabase initialization failed: ${e.message}`;
+        console.error(clientInitError);
+    }
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-        flowType: 'pkce',
-        detectSessionInUrl: false,
-    }
-});
-
 const createAuthenticatedClient = async (token, refreshToken) => {
+    if (!supabase) return null; // Fail fast if init failed
+
     const client = createClient(supabaseUrl, supabaseKey, {
         auth: {
             flowType: 'pkce',
@@ -29,7 +40,7 @@ const createAuthenticatedClient = async (token, refreshToken) => {
     if (token) {
         const { error } = await client.auth.setSession({
             access_token: token,
-            refresh_token: refreshToken || '' // Refresh token might be needed for some ops
+            refresh_token: refreshToken || ''
         });
         if (error) console.warn('createAuthenticatedClient session warning:', error);
     }
@@ -37,5 +48,13 @@ const createAuthenticatedClient = async (token, refreshToken) => {
     return client;
 };
 
-module.exports = { supabase, createAuthenticatedClient };
+// Diagnostics helper
+const getSupabaseStatus = () => ({
+    ready: !!supabase,
+    error: clientInitError,
+    url_configured: !!supabaseUrl,
+    key_configured: !!supabaseKey
+});
+
+module.exports = { supabase, createAuthenticatedClient, getSupabaseStatus };
 

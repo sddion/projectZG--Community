@@ -96,12 +96,19 @@ app.get('/api/debug-paths', (req, res) => {
         }
     };
 
+    const { getSupabaseStatus } = require('./utils/supabaseClient');
     res.json({
         cwd: process.cwd(),
         dirname: __dirname,
         root_files: safeList(process.cwd()),
         public_files: safeList(path.join(process.cwd(), 'public')),
-        auth_files_check: safeList(path.join(process.cwd(), 'api/auth'))
+        auth_files_check: safeList(path.join(process.cwd(), 'api/auth')),
+        supabase_status: getSupabaseStatus(),
+        env_check: {
+            NODE_ENV: process.env.NODE_ENV,
+            HAS_URL: !!process.env.SUPABASE_URL,
+            HAS_KEY: !!process.env.SUPABASE_ANON_KEY
+        }
     });
 });
 
