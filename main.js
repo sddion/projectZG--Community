@@ -88,29 +88,24 @@ app.get([
 app.get('/api/debug-paths', (req, res) => {
     const fs = require('fs');
 
-    const listDir = (dir) => {
+    const safeList = (dir) => {
         try {
-            return fs.readdirSync(dir).map(f => {
-                const fullPath = path.join(dir, f);
-                try {
-                    return fs.statSync(fullPath).isDirectory() ? { name: f, wrapper: listDir(fullPath) } : f;
-                } catch (e) { return f; }
-            });
+            return fs.readdirSync(dir);
         } catch (e) {
-            return e.message;
+            return `Error: ${e.message}`;
         }
     };
 
     res.json({
         cwd: process.cwd(),
         dirname: __dirname,
-        ls_cwd: listDir(process.cwd()),
-        ls_public: listDir(path.join(process.cwd(), 'public')),
-        ls_task: listDir('/var/task')
+        root_files: safeList(process.cwd()),
+        public_files: safeList(path.join(process.cwd(), 'public')),
+        auth_files_check: safeList(path.join(process.cwd(), 'api/auth'))
     });
 });
 
-app.use('/api/auth', require('./routes/auth/index'));
+app.use('/api/auth', require('./api/auth/index'));
 
 
 // Only listen if run directly (local dev), otherwise export for Vercel

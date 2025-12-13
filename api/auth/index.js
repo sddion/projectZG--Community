@@ -14,7 +14,7 @@ const upload = multer({
 
 const resetPasswordLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 3, // limit each IP to 3 requests per windowMs
+    max: 3, // limit each IP to 3 requests per window
     message: 'Too many password reset attempts, please try again later'
 });
 
