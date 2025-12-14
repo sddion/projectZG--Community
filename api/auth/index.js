@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const authController = require('../../controllers/authController');
+const auth = require('../../controllers/auth');
 const authMiddleware = require('../../utils/authMiddleware');
 const rateLimit = require('express-rate-limit');
 const multer = require('multer');
@@ -21,29 +21,29 @@ const resetPasswordLimiter = rateLimit({
 // --- ROUTES ---
 
 // 1. SIGNUP
-router.post('/signup', authController.signup);
+router.post('/signup', auth.signup);
 
 // 2. LOGIN
-router.post('/login', authController.login);
+router.post('/login', auth.login);
 
 // 3. GOOGLE OAUTH
-router.get('/google', authController.googleAuth);
+router.get('/google', auth.googleAuth);
 
 // 4. CALLBACK
-router.get('/callback', authController.googleCallback);
+router.get('/callback', auth.googleCallback);
 
 // 5. ME
-router.get('/me', authMiddleware, authController.getMe);
+router.get('/me', authMiddleware, auth.getMe);
 
 // 6. LOGOUT
-router.post('/logout', authController.logout);
+router.post('/logout', auth.logout);
 
 // 7. RESET PASSWORD
-router.post('/reset-password', resetPasswordLimiter, authController.resetPassword);
+router.post('/reset-password', resetPasswordLimiter, auth.resetPassword);
 
-router.post('/reset-password/update', authController.updatePassword);
+router.post('/reset-password/update', auth.updatePassword);
 
 // 8. ONBOARDING
-router.post('/onboarding', upload.single('avatar'), authMiddleware, authController.onboarding);
+router.post('/onboarding', upload.single('avatar'), authMiddleware, auth.onboarding);
 
 module.exports = router;

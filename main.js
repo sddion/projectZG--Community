@@ -43,6 +43,7 @@ app.use((req, res, next) => {
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
         "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
         "img-src 'self' data: https: blob:",
+        "media-src 'self' data: blob: https:",
         "connect-src 'self' https://*.supabase.co https://unpkg.com https://vercel.live wss://ws-us3.pusher.com https://sockjs-us3.pusher.com",
         "frame-src 'self' https://vercel.live", // Added vercel.live for toolbar
         "frame-ancestors 'none'",
@@ -87,6 +88,7 @@ app.get([
 
 // API Routes
 app.use('/api/auth', require('./api/auth/index'));
+app.use('/api', require('./api/profile/index'));
 
 
 // Only listen if run directly (local dev), otherwise export for Vercel

@@ -17,5 +17,5 @@ npm run dev
 Run the following command before deploying:
 
 ```bash
-npm run build:css
+npm run build
 ```

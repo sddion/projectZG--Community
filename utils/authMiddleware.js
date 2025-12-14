@@ -10,18 +10,34 @@ const authMiddleware = (req, res, next) => {
         return;
     }
 
-    const token = req.cookies['sb-access-token'];
-    const refreshToken = req.cookies['sb-refresh-token'];
+    const token = req.cookies['sb-access-token'] ||
+        (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
-    if (token) {
-        req.headers.authorization = `Bearer ${token}`;
-    }
-    if (refreshToken) {
-        req.headers['x-refresh-token'] = refreshToken;
+    if (!token) {
+        // Debug: Check if we are in a route that might not need auth or if it's missing
+        // For now, if no token, we can't set req.user. 
+        // Most controllers crash without it, so we should probably 401 here 
+        // OR set req.user to null and let controller handle it.
+        // Given the crash, strict auth seems expected for these routes.
+        return res.status(401).json({ error: 'Unauthorized: No token provided' });
     }
 
-    // Continue even if no token found (some routes might allow public access or handle 401 themselves)
-    next();
+    // Import supabase here to avoid circular dependency issues if any, 
+    // though usually safe at top. Ideally move import to top.
+    const { supabase } = require('./supabaseClient');
+
+    supabase.auth.getUser(token).then(({ data, error }) => {
+        if (error || !data.user) {
+            console.error('Auth Middleware Verification Failed:', error ? error.message : 'No user');
+            return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+        }
+
+        req.user = data.user;
+        next();
+    }).catch(err => {
+        console.error('Auth Middleware Exception:', err);
+        res.status(500).json({ error: 'Internal Server Error during auth' });
+    });
 };
 
 module.exports = authMiddleware;

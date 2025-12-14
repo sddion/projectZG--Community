@@ -29,23 +29,23 @@ if (!supabaseUrl || !supabaseKey) {
     }
 }
 
-const createAuthenticatedClient = async (token, refreshToken) => {
+const createAuthenticatedClient = async (token) => {
     if (!supabase) return null; // Fail fast if init failed
 
+    // Create a new client with the Auth header pre-set
+    // This bypasses the need for setSession and refresh tokens
     const client = createClient(supabaseUrl, supabaseKey, {
+        global: {
+            headers: {
+                Authorization: `Bearer ${token}`
+            }
+        },
         auth: {
-            flowType: 'pkce',
-            detectSessionInUrl: false,
+            autoRefreshToken: false,
+            persistSession: false,
+            detectSessionInUrl: false
         }
     });
-
-    if (token) {
-        const { error } = await client.auth.setSession({
-            access_token: token,
-            refresh_token: refreshToken || ''
-        });
-        if (error) console.warn('createAuthenticatedClient session warning:', error);
-    }
 
     return client;
 };
@@ -60,7 +60,11 @@ const createContextClient = (req, res) => {
             },
             setAll(cookiesToSet) {
                 cookiesToSet.forEach(({ name, value, options }) => {
-                    res.cookie(name, value, options);
+                    if (!res.headersSent) {
+                        res.cookie(name, value, options);
+                    } else {
+                        console.warn(`[Supabase] Should set cookie ${name} but headers sent.`);
+                    }
                 });
             },
         },
