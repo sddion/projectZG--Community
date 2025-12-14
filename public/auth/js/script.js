@@ -70,6 +70,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const searchParams = new URLSearchParams(window.location.search);
         const hashParams = new URLSearchParams(hash.substring(1));
 
+        // Capture onboarding status BEFORE clearing history
+        const isOnboarding = path.includes('onboarding') ||
+            hashParams.get('onboarding') === 'true' ||
+            hash === '#onboarding' ||
+            searchParams.get('onboarding') === 'true';
+
         // Error Handling
         if (searchParams.get('error')) {
             const err = searchParams.get('error');
@@ -88,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionToken = at; // Capture token
 
             window.history.replaceState(null, null, window.location.pathname);
-            checkAuthStatus(at); // Re-verify with explicit token
+            checkAuthStatus(at, isOnboarding); // Re-verify with explicit token and onboarding status
             // Continue to routing logic so view is set correctly
         }
 
@@ -99,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
             store.dispatch(Actions.setView('reset-password'));
         } else if (path.includes('verify-email')) {
             store.dispatch(Actions.setView('verify-email'));
-        } else if (path.includes('onboarding') || hashParams.get('onboarding') === 'true' || hash === '#onboarding' || searchParams.get('onboarding') === 'true') {
+        } else if (isOnboarding) {
             store.dispatch(Actions.setView('onboarding'));
         } else {
             store.dispatch(Actions.setView('auth'));
@@ -109,7 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function checkAuthStatus(explicitToken = null) {
+    async function checkAuthStatus(explicitToken = null, isOnboarding = false) {
         try {
             const headers = {};
             if (explicitToken) {
@@ -124,8 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await res.json();
                 if (data.user) {
                     store.dispatch(Actions.setUser(data.user));
-                    // Redirect to home if on login page
-                    if (!window.location.pathname.includes('onboarding') && store.getState().view === 'auth') {
+
+                    // If we are NOT onboarding, and the user is logged in, redirect to home.
+                    // If we ARE onboarding (passed from handleInitialRoute), stay here.
+                    if (!isOnboarding && !window.location.pathname.includes('onboarding') && store.getState().view === 'auth') {
                         // Double check we aren't supposed to be onboarding based on URL
                         const search = new URLSearchParams(window.location.search);
                         if (search.get('onboarding') !== 'true') {

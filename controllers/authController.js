@@ -160,12 +160,15 @@ const googleAuth = async (req, res) => {
             throw new Error('ALLOWED_ORIGIN or ALLOWED_ORIGINS environment variable must be set');
         }
 
-        if (!supabase) {
+        // Use request-scoped client to handle code verifier cookie
+        const supabaseClient = require('../utils/supabaseClient').createContextClient(req, res);
+
+        if (!supabaseClient) {
             console.error('Supabase client is not initialized. Check server environment variables.');
             return res.status(500).json({ error: 'Database connection unavailable' });
         }
 
-        const { data, error } = await supabase.auth.signInWithOAuth({
+        const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
                 redirectTo: `${origin}/api/auth/callback`,
@@ -199,7 +202,14 @@ const googleAuth = async (req, res) => {
 };
 
 const googleCallback = async (req, res) => {
-    const { code, error, error_description, state } = req.query;
+    const { code, error, error_description } = req.query;
+
+    console.log('\n\n==================================================');
+    console.log('[Auth-Callback] HIT');
+    console.log('[Auth-Callback] URL:', req.originalUrl);
+    console.log('[Auth-Callback] Params:', { code: !!code, error, state: !!req.query.state });
+    console.log('[Auth-Callback] Cookies:', JSON.stringify(req.cookies));
+    console.log('==================================================\n\n');
 
     if (error) {
         const description = error_description || 'Unknown error';
@@ -212,21 +222,18 @@ const googleCallback = async (req, res) => {
         return res.redirect('/auth?error=no_code');
     }
 
-    // CSRF Check: Validate state parameter
-    // Supabase handles this via PKCE exchangeCodeForSession usually, 
-    // but if we need manual state, we must ensure it matches what we sent.
-    // Since we removed manual state sending to let Supabase handle it, we skip manual check here.
-
-    // if (!state || !storedState || state !== storedState) {
-    //      return res.redirect('/auth?error=invalid_state');
-    // }
-
-
     try {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        // Use request-scoped client to retrieve code verifier from cookie
+        const supabaseClient = require('../utils/supabaseClient').createContextClient(req, res);
+
+        const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
 
         if (error) {
             console.error('[Auth-Callback] Code Exchange Error:', error);
+            // Check for specific PKCE error for better feedback
+            if (error.name === 'AuthApiError' && error.message.includes('code verifier')) {
+                return res.redirect(`/auth?error=${encodeURIComponent('Authentication mismatch. Please try again.')}`);
+            }
             return res.redirect(`/auth?error=${encodeURIComponent(error.message)}`);
         }
 

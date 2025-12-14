@@ -48,5 +48,43 @@ const createAuthenticatedClient = async (token, refreshToken) => {
     return client;
 };
 
-module.exports = { supabase, createAuthenticatedClient };
+const createContextClient = (req, res) => {
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    return createClient(supabaseUrl, supabaseKey, {
+        auth: {
+            flowType: 'pkce',
+            detectSessionInUrl: false,
+            storage: {
+                getItem: (key) => {
+                    const value = req.cookies[key];
+                    console.log(`[Supabase-Cookie-Read] Key: ${key} | CookieKeys: ${Object.keys(req.cookies).join(',')} | Found: ${!!value}`);
+                    return value;
+                },
+                setItem: (key, value) => {
+                    console.log(`[Supabase-Cookie-Write] Key: ${key}, Value Length: ${value ? value.length : 0}`);
+                    // Store the code verifier in a cookie
+                    res.cookie(key, value, {
+                        httpOnly: true,
+                        secure: false, // FORCE FALSE FOR DEBUGGING
+                        sameSite: 'lax',
+                        path: '/',
+                        maxAge: 60 * 60 * 1000 // 1 hour
+                    });
+                },
+                removeItem: (key) => {
+                    console.log(`[Supabase-Cookie-Remove] Key: ${key}`);
+                    res.clearCookie(key, {
+                        path: '/',
+                        httpOnly: true,
+                        secure: false,
+                        sameSite: 'lax'
+                    });
+                },
+            },
+        },
+    });
+};
+
+module.exports = { supabase, createAuthenticatedClient, createContextClient };
 
