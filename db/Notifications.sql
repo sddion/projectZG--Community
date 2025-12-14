@@ -169,4 +169,30 @@ create trigger on_repost_create_notification
   after insert on public.reactions
   for each row execute function create_repost_notification();
 
+-- Reply Notification (notify parent comment author when someone replies)
+
+ALTER TABLE public.notifications DROP CONSTRAINT notifications_type_check;
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_type_check 
+  CHECK (type in ('follow', 'like', 'comment', 'repost', 'message', 'mention', 'reply'));
+
+create or replace function create_reply_notification()
+returns trigger language plpgsql security definer as $$
+begin
+  -- Only trigger for replies (comments with parent_id)
+  if TG_OP = 'INSERT' and NEW.parent_id is not null then
+    insert into public.notifications (user_id, type, actor_id, post_id, metadata, created_at)
+    select c.user_id, 'reply', NEW.user_id, NEW.post_id, 
+           jsonb_build_object('comment_id', NEW.parent_id), now()
+    from public.comments c
+    where c.id = NEW.parent_id and c.user_id != NEW.user_id;
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists on_reply_create_notification on public.comments;
+create trigger on_reply_create_notification
+  after insert on public.comments
+  for each row execute function create_reply_notification();
+
 

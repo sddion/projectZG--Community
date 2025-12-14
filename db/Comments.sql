@@ -123,3 +123,26 @@ drop trigger if exists on_comment_post_count on public.comments;
 create trigger on_comment_post_count
   after insert or delete on public.comments
   for each row execute function update_post_comment_count();
+
+-- Function to update parent comment replies_count
+create or replace function update_comment_replies_count()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  if TG_OP = 'INSERT' and NEW.parent_id is not null then
+    update public.comments set replies_count = replies_count + 1 where id = NEW.parent_id;
+    return NEW;
+  elsif TG_OP = 'DELETE' and OLD.parent_id is not null then
+    update public.comments set replies_count = greatest(0, replies_count - 1) where id = OLD.parent_id;
+    return OLD;
+  end if;
+  return coalesce(NEW, OLD);
+end;
+$$;
+
+drop trigger if exists on_comment_replies_count on public.comments;
+create trigger on_comment_replies_count
+  after insert or delete on public.comments
+  for each row execute function update_comment_replies_count();

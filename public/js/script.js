@@ -126,6 +126,610 @@ async function toggleBookmark(button, postId) {
     }
 }
 
+// --- Post Edit/Delete Logic ---
+// Toggle dropdown menu for post actions
+window.TogglePostMenu = (event, postId) => {
+    event.stopPropagation();
+    const menu = document.getElementById(`post-menu-${postId}`);
+    if (!menu) return;
+
+    // Close all other menus first
+    document.querySelectorAll('[id^="post-menu-"]').forEach(m => {
+        if (m.id !== `post-menu-${postId}`) {
+            m.classList.add('hidden');
+        }
+    });
+
+    menu.classList.toggle('hidden');
+
+    // Close menu when clicking outside
+    const closeMenu = (e) => {
+        if (!menu.contains(e.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', closeMenu);
+        }
+    };
+
+    if (!menu.classList.contains('hidden')) {
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    }
+};
+
+// Open Edit Post Modal
+window.OpenEditPostModal = (postId, encodedContent) => {
+    // Close dropdown menu
+    const menu = document.getElementById(`post-menu-${postId}`);
+    if (menu) menu.classList.add('hidden');
+
+    const content = decodeURIComponent(encodedContent);
+    const textarea = document.getElementById('edit-post-content');
+    const postIdInput = document.getElementById('edit-post-id');
+
+    if (textarea) textarea.value = content;
+    if (postIdInput) postIdInput.value = postId;
+
+    showModal('editPostModal');
+};
+
+// Edit Post (Submit)
+window.EditPost = async () => {
+    const postId = document.getElementById('edit-post-id').value;
+    const content = document.getElementById('edit-post-content').value.trim();
+
+    if (!postId || !content) {
+        if (typeof Toast !== 'undefined') Toast.error('Content is required');
+        return;
+    }
+
+    const btn = document.querySelector('#editPostModal button.bg-primary');
+    const originalText = btn.innerText;
+    btn.innerText = 'Saving...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_URL}/posts/${postId}`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            credentials: 'include',
+            body: JSON.stringify({ content })
+        });
+
+        if (response.ok) {
+            const { post } = await response.json();
+
+            // Update DOM optimistically
+            const postElement = document.querySelector(`[data-post-id="${postId}"]`);
+            if (postElement) {
+                const contentEl = postElement.querySelector('.post-content');
+                if (contentEl) {
+                    // Apply same highlighting as createPostHTML
+                    const highlightedContent = content
+                        .replace(/#(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer">#$1</span>')
+                        .replace(/@(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer" onclick="loadPublicProfile(\'$1\'); event.stopPropagation();">@$1</span>');
+                    contentEl.innerHTML = highlightedContent;
+                }
+
+                // Add (edited) indicator if not already present
+                const timeEl = postElement.querySelector('.text-xs.text-secondary');
+                if (timeEl && !timeEl.innerHTML.includes('(edited)')) {
+                    timeEl.innerHTML += ' <span class="text-xs text-secondary">(edited)</span>';
+                }
+            }
+
+            hideModal('editPostModal');
+            if (typeof Toast !== 'undefined') Toast.success('Post updated!');
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Update failed');
+        }
+    } catch (err) {
+        console.error('Edit Post Error:', err);
+        if (typeof Toast !== 'undefined') Toast.error(err.message || 'Failed to update post');
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
+// Delete Post
+window.DeletePost = async (postId) => {
+    // Close dropdown menu
+    const menu = document.getElementById(`post-menu-${postId}`);
+    if (menu) menu.classList.add('hidden');
+
+    if (!confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/posts/${postId}`, {
+            method: 'DELETE',
+            headers: getHeaders(),
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            // Remove from DOM with animation
+            const postElement = document.querySelector(`[data-post-id="${postId}"]`);
+            if (postElement) {
+                postElement.style.transition = 'opacity 0.3s, transform 0.3s';
+                postElement.style.opacity = '0';
+                postElement.style.transform = 'scale(0.95)';
+                setTimeout(() => postElement.remove(), 300);
+            }
+
+            if (typeof Toast !== 'undefined') Toast.success('Post deleted!');
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Delete failed');
+        }
+    } catch (err) {
+        console.error('Delete Post Error:', err);
+        if (typeof Toast !== 'undefined') Toast.error(err.message || 'Failed to delete post');
+    }
+};
+
+// --- Comment System Functions ---
+
+// Open Comments Modal
+window.OpenCommentsModal = async (postId) => {
+    const modal = document.getElementById('commentsModal');
+    const postIdInput = document.getElementById('comments-post-id');
+    const parentIdInput = document.getElementById('comments-parent-id');
+    const commentsList = document.getElementById('comments-list');
+    const commentInput = document.getElementById('comment-input');
+
+    if (!modal || !postIdInput || !commentsList) return;
+
+    postIdInput.value = postId;
+    if (parentIdInput) parentIdInput.value = '';
+    if (commentInput) {
+        commentInput.value = '';
+        commentInput.placeholder = 'Write a comment...';
+    }
+
+    // Show loading state
+    commentsList.innerHTML = '<div class="flex justify-center py-8"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div></div>';
+
+    showModal('commentsModal');
+
+    // Fetch comments
+    try {
+        const response = await fetch(`${API_URL}/posts/${postId}/comments`, {
+            headers: getHeaders(),
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const { comments, totalCount } = await response.json();
+
+            // Update modal header with count
+            const modalHeader = document.querySelector('#commentsModal h3');
+            if (modalHeader) {
+                modalHeader.textContent = `Comments${totalCount > 0 ? ` (${totalCount})` : ''}`;
+            }
+
+            if (comments && comments.length > 0) {
+                commentsList.innerHTML = comments.map(CreateCommentHTML).join('');
+                lucide.createIcons();
+            } else {
+                commentsList.innerHTML = '<p class="text-center text-secondary py-8">No comments yet. Be the first!</p>';
+            }
+        } else {
+            throw new Error('Failed to fetch comments');
+        }
+    } catch (err) {
+        console.error('Fetch Comments Error:', err);
+        commentsList.innerHTML = '<p class="text-center text-red-500 py-8">Failed to load comments</p>';
+    }
+};
+
+// Create Reply HTML (for nested replies)
+function CreateReplyHTML(reply) {
+    const isOwnComment = currentUser && currentUser.id === reply.user_id;
+    const timeAgo = new Date(reply.created_at).toLocaleDateString();
+    const editedIndicator = reply.is_edited ? ' <span class="text-xs text-secondary">(edited)</span>' : '';
+
+    const highlightedContent = (reply.content || '')
+        .replace(/@(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer" onclick="loadPublicProfile(\'$1\'); event.stopPropagation();">@$1</span>');
+
+    const replyMenu = isOwnComment ? `
+        <div class="relative">
+            <button onclick="ToggleCommentMenu(event, '${reply.id}')" class="text-secondary hover:text-main p-1 rounded-full hover:bg-hover-bg transition-colors">
+                <i data-lucide="more-horizontal" class="w-3 h-3"></i>
+            </button>
+            <div id="comment-menu-${reply.id}" class="hidden absolute right-0 top-5 bg-surface border border-app rounded-lg shadow-lg py-1 z-50 min-w-24">
+                <button onclick="OpenEditCommentModal('${reply.id}', \`${encodeURIComponent(reply.content || '')}\`)" class="w-full px-3 py-1 text-left text-xs text-main hover:bg-hover-bg flex items-center gap-2">
+                    <i data-lucide="pencil" class="w-3 h-3"></i> Edit
+                </button>
+                <button onclick="DeleteComment('${reply.id}')" class="w-full px-3 py-1 text-left text-xs text-red-500 hover:bg-hover-bg flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i> Delete
+                </button>
+            </div>
+        </div>
+    ` : '';
+
+    return `
+        <div class="flex gap-2 p-2 hover:bg-hover-bg rounded-lg transition-colors" data-comment-id="${reply.id}" data-parent-id="${reply.parent_id}">
+            <img src="${reply.user?.avatar_url || 'https://placehold.co/24x24'}" class="w-6 h-6 rounded-full object-cover cursor-pointer" onclick="loadPublicProfile('${reply.user?.username}')">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="font-semibold text-xs text-main cursor-pointer hover:underline" onclick="loadPublicProfile('${reply.user?.username}')">${reply.user?.username || 'User'}</span>
+                        <span class="text-xs text-secondary">${timeAgo}${editedIndicator}</span>
+                    </div>
+                    ${replyMenu}
+                </div>
+                <p class="text-sm text-main mt-0.5 comment-content">${highlightedContent}</p>
+            </div>
+        </div>
+    `;
+}
+
+// Create Comment HTML (with replies support)
+function CreateCommentHTML(comment) {
+    const isOwnComment = currentUser && currentUser.id === comment.user_id;
+    const timeAgo = new Date(comment.created_at).toLocaleDateString();
+    const editedIndicator = comment.is_edited ? ' <span class="text-xs text-secondary">(edited)</span>' : '';
+
+    const highlightedContent = (comment.content || '')
+        .replace(/@(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer" onclick="loadPublicProfile(\'$1\'); event.stopPropagation();">@$1</span>');
+
+    const commentMenu = isOwnComment ? `
+        <div class="relative">
+            <button onclick="ToggleCommentMenu(event, '${comment.id}')" class="text-secondary hover:text-main p-1 rounded-full hover:bg-hover-bg transition-colors">
+                <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+            </button>
+            <div id="comment-menu-${comment.id}" class="hidden absolute right-0 top-6 bg-surface border border-app rounded-lg shadow-lg py-1 z-50 min-w-28">
+                <button onclick="OpenEditCommentModal('${comment.id}', \`${encodeURIComponent(comment.content || '')}\`)" class="w-full px-3 py-1.5 text-left text-xs text-main hover:bg-hover-bg flex items-center gap-2">
+                    <i data-lucide="pencil" class="w-3 h-3"></i> Edit
+                </button>
+                <button onclick="DeleteComment('${comment.id}')" class="w-full px-3 py-1.5 text-left text-xs text-red-500 hover:bg-hover-bg flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-3 h-3"></i> Delete
+                </button>
+            </div>
+        </div>
+    ` : '';
+
+    // Replies section
+    const repliesCount = comment.replies_count || (comment.replies ? comment.replies.length : 0);
+    const repliesHtml = comment.replies && comment.replies.length > 0
+        ? `<div class="ml-6 mt-2 border-l-2 border-app pl-2 space-y-1" id="replies-${comment.id}">
+            ${comment.replies.map(CreateReplyHTML).join('')}
+           </div>`
+        : (repliesCount > 0 ? `<div class="ml-6 mt-2" id="replies-${comment.id}"></div>` : `<div class="ml-6 mt-2 hidden" id="replies-${comment.id}"></div>`);
+
+    return `
+        <div class="p-3 hover:bg-hover-bg rounded-lg transition-colors" data-comment-id="${comment.id}">
+            <div class="flex gap-3">
+                <img src="${comment.user?.avatar_url || 'https://placehold.co/32x32'}" class="w-8 h-8 rounded-full object-cover cursor-pointer" onclick="loadPublicProfile('${comment.user?.username}')">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-sm text-main cursor-pointer hover:underline" onclick="loadPublicProfile('${comment.user?.username}')">${comment.user?.username || 'User'}</span>
+                            <span class="text-xs text-secondary">${timeAgo}${editedIndicator}</span>
+                        </div>
+                        ${commentMenu}
+                    </div>
+                    <p class="text-sm text-main mt-1 comment-content">${highlightedContent}</p>
+                    
+                    <!-- Reply Button -->
+                    <div class="flex items-center gap-4 mt-2">
+                        <button onclick="StartReply('${comment.id}', '${comment.user?.username || ''}')" class="text-xs text-secondary hover:text-primary flex items-center gap-1 transition-colors">
+                            <i data-lucide="reply" class="w-3 h-3"></i> Reply
+                        </button>
+                        ${repliesCount > 0 ? `<span class="text-xs text-secondary">${repliesCount} ${repliesCount === 1 ? 'reply' : 'replies'}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+            ${repliesHtml}
+        </div>
+    `;
+}
+
+// Start Reply - Focus input and set parent_id
+window.StartReply = (commentId, username) => {
+    const input = document.getElementById('comment-input');
+    const parentIdInput = document.getElementById('comments-parent-id');
+    const replyIndicator = document.getElementById('reply-indicator');
+
+    if (input) {
+        input.value = username ? `@${username} ` : '';
+        input.placeholder = `Replying to ${username || 'comment'}...`;
+        input.focus();
+    }
+    if (parentIdInput) {
+        parentIdInput.value = commentId;
+    }
+    if (replyIndicator) {
+        replyIndicator.classList.remove('hidden');
+        replyIndicator.innerHTML = `
+            <span class="text-xs text-secondary">Replying to <strong>@${username}</strong></span>
+            <button onclick="CancelReply()" class="text-xs text-red-500 hover:underline ml-2">Cancel</button>
+        `;
+    }
+};
+
+// Cancel Reply
+window.CancelReply = () => {
+    const input = document.getElementById('comment-input');
+    const parentIdInput = document.getElementById('comments-parent-id');
+    const replyIndicator = document.getElementById('reply-indicator');
+
+    if (input) {
+        input.value = '';
+        input.placeholder = 'Write a comment...';
+    }
+    if (parentIdInput) {
+        parentIdInput.value = '';
+    }
+    if (replyIndicator) {
+        replyIndicator.classList.add('hidden');
+    }
+};
+
+// Toggle Comment Menu
+window.ToggleCommentMenu = (event, commentId) => {
+    event.stopPropagation();
+    const menu = document.getElementById(`comment-menu-${commentId}`);
+    if (!menu) return;
+
+    // Close all other menus
+    document.querySelectorAll('[id^="comment-menu-"]').forEach(m => {
+        if (m.id !== `comment-menu-${commentId}`) {
+            m.classList.add('hidden');
+        }
+    });
+
+    menu.classList.toggle('hidden');
+
+    const closeMenu = (e) => {
+        if (!menu.contains(e.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', closeMenu);
+        }
+    };
+
+    if (!menu.classList.contains('hidden')) {
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    }
+};
+
+// Submit Comment (supports replies)
+window.SubmitComment = async () => {
+    const postId = document.getElementById('comments-post-id').value;
+    const parentIdInput = document.getElementById('comments-parent-id');
+    const parentId = parentIdInput ? parentIdInput.value : null;
+    const input = document.getElementById('comment-input');
+    const content = input.value.trim();
+
+    if (!postId || !content) {
+        if (typeof Toast !== 'undefined') Toast.error('Please enter a comment');
+        return;
+    }
+
+    const btn = document.querySelector('#commentsModal button.bg-primary');
+    const originalText = btn.innerText;
+    btn.innerText = 'Posting...';
+    btn.disabled = true;
+
+    try {
+        const body = { content };
+        if (parentId) body.parent_id = parentId;
+
+        const response = await fetch(`${API_URL}/posts/${postId}/comments`, {
+            method: 'POST',
+            headers: getHeaders(),
+            credentials: 'include',
+            body: JSON.stringify(body)
+        });
+
+        if (response.ok) {
+            const { comment } = await response.json();
+
+            const commentsList = document.getElementById('comments-list');
+            const noCommentsText = commentsList.querySelector('p.text-center');
+            if (noCommentsText) noCommentsText.remove();
+
+            if (parentId) {
+                // Add reply nested under parent
+                const repliesContainer = document.getElementById(`replies-${parentId}`);
+                if (repliesContainer) {
+                    repliesContainer.classList.remove('hidden');
+                    if (!repliesContainer.querySelector('.border-l-2')) {
+                        repliesContainer.classList.add('border-l-2', 'border-app', 'pl-2', 'space-y-1');
+                    }
+                    repliesContainer.insertAdjacentHTML('beforeend', CreateReplyHTML(comment));
+                }
+
+                // Update replies count display
+                const parentElement = document.querySelector(`[data-comment-id="${parentId}"]`);
+                if (parentElement) {
+                    const countSpan = parentElement.querySelector('.text-xs.text-secondary:last-child');
+                    if (countSpan && countSpan.textContent.includes('repl')) {
+                        const count = parseInt(countSpan.textContent) || 0;
+                        countSpan.textContent = `${count + 1} ${count + 1 === 1 ? 'reply' : 'replies'}`;
+                    }
+                }
+            } else {
+                // Add top-level comment
+                commentsList.insertAdjacentHTML('beforeend', CreateCommentHTML(comment));
+
+                // Update post comment count in real-time
+                UpdatePostCommentCount(postId, 1);
+            }
+
+            lucide.createIcons();
+            input.value = '';
+            CancelReply(); // Reset reply state
+
+            if (typeof Toast !== 'undefined') Toast.success(parentId ? 'Reply posted!' : 'Comment posted!');
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Failed to post comment');
+        }
+    } catch (err) {
+        console.error('Submit Comment Error:', err);
+        if (typeof Toast !== 'undefined') Toast.error(err.message || 'Failed to post comment');
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
+// Update Post Comment Count in Real-Time
+function UpdatePostCommentCount(postId, delta) {
+    const postElement = document.querySelector(`[data-post-id="${postId}"]`);
+    if (postElement) {
+        const btns = postElement.querySelectorAll('button');
+        btns.forEach(btn => {
+            if (btn.querySelector('[data-lucide="message-circle"]')) {
+                const countSpan = btn.querySelector('.text-sm.font-medium');
+                if (countSpan) {
+                    const currentCount = parseInt(countSpan.textContent) || 0;
+                    countSpan.textContent = Math.max(0, currentCount + delta);
+                }
+            }
+        });
+    }
+
+    // Also update modal header
+    const modalHeader = document.querySelector('#commentsModal h3');
+    if (modalHeader) {
+        const match = modalHeader.textContent.match(/\((\d+)\)/);
+        const currentCount = match ? parseInt(match[1]) : 0;
+        const newCount = Math.max(0, currentCount + delta);
+        modalHeader.textContent = `Comments${newCount > 0 ? ` (${newCount})` : ''}`;
+    }
+}
+
+// Open Edit Comment Modal
+window.OpenEditCommentModal = (commentId, encodedContent) => {
+    const menu = document.getElementById(`comment-menu-${commentId}`);
+    if (menu) menu.classList.add('hidden');
+
+    const content = decodeURIComponent(encodedContent);
+    const textarea = document.getElementById('edit-comment-content');
+    const commentIdInput = document.getElementById('edit-comment-id');
+
+    if (textarea) textarea.value = content;
+    if (commentIdInput) commentIdInput.value = commentId;
+
+    showModal('editCommentModal');
+};
+
+// Edit Comment
+window.EditComment = async () => {
+    const commentId = document.getElementById('edit-comment-id').value;
+    const content = document.getElementById('edit-comment-content').value.trim();
+
+    if (!commentId || !content) {
+        if (typeof Toast !== 'undefined') Toast.error('Content is required');
+        return;
+    }
+
+    const btn = document.querySelector('#editCommentModal button.bg-primary');
+    const originalText = btn.innerText;
+    btn.innerText = 'Saving...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_URL}/comments/${commentId}`, {
+            method: 'PUT',
+            headers: getHeaders(),
+            credentials: 'include',
+            body: JSON.stringify({ content })
+        });
+
+        if (response.ok) {
+            // Update DOM
+            const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+            if (commentElement) {
+                const contentEl = commentElement.querySelector('.comment-content');
+                if (contentEl) {
+                    const highlightedContent = content
+                        .replace(/@(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer" onclick="loadPublicProfile(\'$1\'); event.stopPropagation();">@$1</span>');
+                    contentEl.innerHTML = highlightedContent;
+                }
+
+                // Add edited indicator
+                const timeEl = commentElement.querySelector('.text-xs.text-secondary');
+                if (timeEl && !timeEl.innerHTML.includes('(edited)')) {
+                    timeEl.innerHTML += ' <span class="text-xs text-secondary">(edited)</span>';
+                }
+            }
+
+            hideModal('editCommentModal');
+            if (typeof Toast !== 'undefined') Toast.success('Comment updated!');
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Update failed');
+        }
+    } catch (err) {
+        console.error('Edit Comment Error:', err);
+        if (typeof Toast !== 'undefined') Toast.error(err.message || 'Failed to update comment');
+    } finally {
+        btn.innerText = originalText;
+        btn.disabled = false;
+    }
+};
+
+// Delete Comment
+window.DeleteComment = async (commentId) => {
+    const menu = document.getElementById(`comment-menu-${commentId}`);
+    if (menu) menu.classList.add('hidden');
+
+    if (!confirm('Delete this comment?')) return;
+
+    try {
+        const response = await fetch(`${API_URL}/comments/${commentId}`, {
+            method: 'DELETE',
+            headers: getHeaders(),
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const { postId } = await response.json();
+
+            // Check if this is a reply (has parent)
+            const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+            const isReply = commentElement && commentElement.dataset.parentId;
+
+            // Remove from DOM
+            if (commentElement) {
+                commentElement.style.transition = 'opacity 0.2s';
+                commentElement.style.opacity = '0';
+                setTimeout(() => commentElement.remove(), 200);
+            }
+
+            // Update count only for top-level comments
+            if (!isReply && postId) {
+                UpdatePostCommentCount(postId, -1);
+            }
+
+            if (typeof Toast !== 'undefined') Toast.success('Comment deleted!');
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Delete failed');
+        }
+    } catch (err) {
+        console.error('Delete Comment Error:', err);
+        if (typeof Toast !== 'undefined') Toast.error(err.message || 'Failed to delete comment');
+    }
+};
+
+// Insert mention at cursor
+window.InsertMention = () => {
+    const input = document.getElementById('comment-input');
+    if (!input) return;
+    const pos = input.selectionStart;
+    const before = input.value.substring(0, pos);
+    const after = input.value.substring(pos);
+    input.value = before + '@' + after;
+    input.selectionStart = input.selectionEnd = pos + 1;
+    input.focus();
+};
+
 // --- Feed & Post Creation ---
 function createPostHTML(post) {
     const isLiked = post.has_liked ? 'liked-active' : '';
@@ -133,6 +737,8 @@ function createPostHTML(post) {
     const isBookmarked = post.has_bookmarked ? 'text-primary' : '';
     const bookmarkFill = post.has_bookmarked ? 'currentColor' : 'none';
     const timeAgo = new Date(post.created_at).toLocaleDateString();
+    const isOwnPost = currentUser && currentUser.id === post.author_id;
+    const editedIndicator = post.is_edited ? ' <span class="text-xs text-secondary">(edited)</span>' : '';
 
     // Highlight Mentions and Hashtags
     // Regex logic:
@@ -142,20 +748,39 @@ function createPostHTML(post) {
         .replace(/#(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer">#$1</span>')
         .replace(/@(\w+)/g, '<span class="text-primary font-medium hover:underline cursor-pointer" onclick="loadPublicProfile(\'$1\'); event.stopPropagation();">@$1</span>');
 
+    // Post menu for author only
+    const postMenu = isOwnPost ? `
+        <div class="relative">
+            <button onclick="TogglePostMenu(event, '${post.id}')" class="ml-auto text-secondary hover:text-main p-1 rounded-full hover:bg-hover-bg transition-colors">
+                <i data-lucide="more-horizontal" class="w-5 h-5"></i>
+            </button>
+            <div id="post-menu-${post.id}" class="hidden absolute right-0 top-8 bg-surface border border-app rounded-lg shadow-lg py-1 z-50 min-w-32">
+                <button onclick="OpenEditPostModal('${post.id}', \`${encodeURIComponent(post.content_text || '')}\`)" class="w-full px-4 py-2 text-left text-sm text-main hover:bg-hover-bg flex items-center gap-2">
+                    <i data-lucide="pencil" class="w-4 h-4"></i> Edit
+                </button>
+                <button onclick="DeletePost('${post.id}')" class="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-hover-bg flex items-center gap-2">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
+                </button>
+            </div>
+        </div>
+    ` : `
+        <button class="ml-auto text-secondary hover:text-main">
+            <i data-lucide="more-horizontal" class="w-5 h-5"></i>
+        </button>
+    `;
+
     return `
-        <div class="bg-surface p-4 rounded-xl shadow-sm border border-app animate-fade-in">
+        <div class="bg-surface p-4 rounded-xl shadow-sm border border-app animate-fade-in" data-post-id="${post.id}">
             <div class="flex items-center mb-3">
                 <img src="${post.author.avatar_url || 'https://placehold.co/40x40'}" class="w-10 h-10 rounded-full mr-3 object-cover cursor-pointer hover:opacity-80" alt="Avatar" onclick="loadPublicProfile('${post.author.username}')">
                 <div>
                     <h4 class="font-bold text-main text-sm cursor-pointer hover:underline" onclick="loadPublicProfile('${post.author.username}')">${post.author.full_name || post.author.username}</h4>
-                    <p class="text-xs text-secondary">@${post.author.username} • ${timeAgo}</p>
+                    <p class="text-xs text-secondary">@${post.author.username} • ${timeAgo}${editedIndicator}</p>
                 </div>
-                <button class="ml-auto text-secondary hover:text-main">
-                    <i data-lucide="more-horizontal" class="w-5 h-5"></i>
-                </button>
+                ${postMenu}
             </div>
             
-            <p class="text-main mb-3 whitespace-pre-wrap">${highlightedContent}</p>
+            <p class="text-main mb-3 whitespace-pre-wrap post-content">${highlightedContent}</p>
             
             ${post.media_urls && post.media_urls.length > 0 ? `
             <div class="mb-4 rounded-lg overflow-hidden border border-app grid gap-1 ${post.media_urls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}">
@@ -174,7 +799,7 @@ function createPostHTML(post) {
                         <span data-count="like" class="text-sm font-medium">${post.likes_count || 0}</span>
                     </button>
                     
-                    <button class="flex items-center space-x-2 text-secondary hover:text-primary transition-colors">
+                    <button onclick="OpenCommentsModal('${post.id}')" class="flex items-center space-x-2 text-secondary hover:text-primary transition-colors">
                         <i data-lucide="message-circle" class="w-5 h-5"></i>
                         <span class="text-sm font-medium">${post.comments_count || 0}</span>
                     </button>
@@ -192,13 +817,29 @@ function createPostHTML(post) {
         </div>
     `;
 }
+// Feed filter state: 'all' or 'following'
+let currentFeedFilter = 'following';
 
-async function fetchFeed() {
+// Profile tab state: 'posts', 'saved', 'tagged'
+let currentProfileTab = 'posts';
+
+async function fetchFeed(filter = null) {
     const feedContainer = document.getElementById('post-feed');
     if (!feedContainer) return;
 
+    // Use provided filter or current state
+    const feedFilter = filter || currentFeedFilter;
+    currentFeedFilter = feedFilter;
+
+    // Show loading
+    feedContainer.innerHTML = '<div class="flex justify-center py-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>';
+
     try {
-        const response = await fetch(`${API_URL}/posts`, {
+        const url = feedFilter === 'following'
+            ? `${API_URL}/posts?filter=following`
+            : `${API_URL}/posts`;
+
+        const response = await fetch(url, {
             headers: getHeaders(),
             credentials: 'include'
         });
@@ -208,10 +849,13 @@ async function fetchFeed() {
                 feedContainer.innerHTML = data.posts.map(createPostHTML).join('');
                 lucide.createIcons();
             } else {
+                const emptyMsg = feedFilter === 'following'
+                    ? 'No posts from people you follow yet. Follow more users or switch to All!'
+                    : 'No posts yet. Be the first to post!';
                 feedContainer.innerHTML = `
                     <div class="text-center py-10 text-secondary bg-surface rounded-xl border border-app">
                         <i data-lucide="newspaper" class="w-12 h-12 mx-auto mb-3 opacity-20"></i>
-                        <p>No posts yet. Be the first to post!</p>
+                        <p>${emptyMsg}</p>
                     </div>`;
                 lucide.createIcons();
             }
@@ -220,6 +864,107 @@ async function fetchFeed() {
         console.error("Failed to load feed", err);
     }
 }
+
+// Switch feed filter (Following/All) - called from HTML
+window.SwitchFeedFilter = (filter) => {
+    currentFeedFilter = filter;
+
+    // Update tab styles
+    const tabs = document.querySelectorAll('#feedView .space-x-4 button');
+    tabs.forEach(tab => {
+        const isActive = tab.textContent.toLowerCase().includes(filter === 'following' ? 'follow' : 'all');
+        tab.classList.toggle('text-primary', isActive);
+        tab.classList.toggle('border-b-2', isActive);
+        tab.classList.toggle('border-primary', isActive);
+        tab.classList.toggle('font-semibold', isActive);
+        tab.classList.toggle('text-secondary', !isActive);
+    });
+
+    fetchFeed(filter);
+};
+
+// Switch profile tab (Posts/Saved/Tagged) - called from HTML
+window.SwitchProfileTab = async (tab) => {
+    console.log('[DEBUG] SwitchProfileTab called:', tab);
+
+    currentProfileTab = tab;
+    const grid = document.getElementById('profile-posts-grid');
+
+    // Update tab styles
+    const tabs = document.querySelectorAll('.profile-tab');
+    tabs.forEach(t => {
+        const tabText = t.textContent.toLowerCase().trim();
+        const isActive = tabText === tab;
+        t.classList.toggle('text-primary', isActive);
+        t.classList.toggle('border-b-2', isActive);
+        t.classList.toggle('border-primary', isActive);
+        t.classList.toggle('font-semibold', isActive);
+        t.classList.toggle('text-secondary', !isActive);
+    });
+
+    if (!grid) {
+        console.log('[DEBUG] No grid found');
+        return;
+    }
+
+    // For saved/tagged, require login
+    if ((tab === 'saved' || tab === 'tagged') && !currentUser) {
+        grid.innerHTML = '<div class="col-span-3 text-center py-4 text-xs text-secondary">Login to view</div>';
+        return;
+    }
+
+    grid.innerHTML = '<div class="col-span-3 text-center py-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto"></div></div>';
+
+    let endpoint = `${API_URL}/profile/posts`;
+    if (tab === 'saved') endpoint = `${API_URL}/profile/bookmarks`;
+    if (tab === 'tagged') endpoint = `${API_URL}/profile/tagged`;
+
+    try {
+        const response = await fetch(endpoint, {
+            headers: getHeaders(),
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const { posts } = await response.json();
+            grid.innerHTML = '';
+
+            if (!posts || posts.length === 0) {
+                const emptyMsgs = {
+                    posts: 'No posts yet',
+                    saved: 'No saved posts',
+                    tagged: 'No posts you were tagged in'
+                };
+                grid.innerHTML = `<div class="col-span-3 text-center py-4 text-xs text-secondary">${emptyMsgs[tab]}</div>`;
+                return;
+            }
+
+            posts.forEach(post => {
+                const hasMedia = post.media_urls && post.media_urls.length > 0;
+                const el = document.createElement('div');
+                el.className = 'aspect-square bg-placeholder-bg rounded-lg overflow-hidden relative cursor-pointer hover:opacity-90 transition-opacity';
+
+                if (hasMedia) {
+                    const isVideo = post.media_urls[0].match(/\.(mp4|webm|ogg|mov|quicktime)$/i);
+                    if (isVideo) {
+                        el.innerHTML = `<video src="${post.media_urls[0]}" class="w-full h-full object-cover"></video>`;
+                    } else {
+                        el.innerHTML = `<img src="${post.media_urls[0]}" class="w-full h-full object-cover">`;
+                    }
+                } else {
+                    el.innerHTML = `
+                        <div class="h-full w-full p-2 flex items-center justify-center bg-surface border border-app">
+                            <p class="text-[0.6rem] text-secondary line-clamp-4 text-center">${post.content_text || ''}</p>
+                        </div>`;
+                }
+                grid.appendChild(el);
+            });
+        }
+    } catch (err) {
+        console.error('Error fetching profile tab:', err);
+        grid.innerHTML = '<div class="col-span-3 text-center py-4 text-xs text-secondary">Failed to load</div>';
+    }
+};
 
 // File Preview Handling
 let selectedFiles = [];
@@ -614,6 +1359,11 @@ async function renderProfileView(profile, isOwnProfile) {
             if (editBio) editBio.value = profile.bio || '';
             if (editGender && profile.gender) editGender.value = profile.gender;
 
+            const editAvatarPreview = document.getElementById('edit-avatar-preview');
+            if (editAvatarPreview && profile.avatar_url) {
+                editAvatarPreview.src = profile.avatar_url;
+            }
+
         } else {
             // Public View Actions
             const isFollowing = profile.is_following;
@@ -921,7 +1671,10 @@ async function identifyCurrentUser() {
 async function fetchNotifications() {
     try {
         // Optimistic UI: If we already have a badge, ensure we clear it if viewed (logic later)
-        const response = await fetch(`${API_URL}/notifications`, { headers: getHeaders() });
+        const response = await fetch(`${API_URL}/notifications`, {
+            headers: getHeaders(),
+            credentials: 'include'
+        });
         if (response.ok) {
             const { notifications } = await response.json();
             renderNotifications(notifications);
@@ -931,53 +1684,173 @@ async function fetchNotifications() {
     }
 }
 
-function renderNotifications(notifications) {
-    const list = document.getElementById('notification-list');
-    if (!list) return;
+// Helper: Get relative time (Today, Yesterday, or date)
+function GetRelativeTime(dateStr) {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
 
-    // If we have a dedicated notifications view container, render there
-    // For this app, let's assume 'notificationsView' has a container
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    if (dateOnly.getTime() === today.getTime()) {
+        return 'Today';
+    } else if (dateOnly.getTime() === yesterday.getTime()) {
+        return 'Yesterday';
+    } else {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+}
+
+// Handle notification click based on type
+window.HandleNotificationClick = (type, postId, actorUsername) => {
+    if (type === 'follow') {
+        // Navigate to actor's profile
+        loadPublicProfile(actorUsername);
+    } else if (type === 'like' || type === 'repost') {
+        // Navigate to post (scroll to it in feed or show it)
+        changeView('feed');
+        // Optionally open post detail - for now just go to feed
+        if (typeof Toast !== 'undefined') Toast.info('Post opened in feed');
+    } else if (type === 'comment' || type === 'mention' || type === 'reply') {
+        // Open comments modal for the post
+        if (postId) {
+            OpenCommentsModal(postId);
+        }
+    }
+};
+
+// Follow back action
+window.FollowBack = async (event, actorId, actorUsername) => {
+    event.stopPropagation();
+
+    const btn = event.target.closest('button');
+    const originalText = btn.innerText;
+    btn.innerText = 'Following...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_URL}/profile/follow/${actorId}`, {
+            method: 'POST',
+            headers: getHeaders(),
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const { following } = await response.json();
+            btn.innerText = following ? 'Following' : 'Follow Back';
+            btn.classList.toggle('bg-primary', !following);
+            btn.classList.toggle('bg-hover-bg', following);
+            btn.classList.toggle('text-white', !following);
+            btn.classList.toggle('text-main', following);
+            if (typeof Toast !== 'undefined') {
+                Toast.success(following ? `Now following @${actorUsername}` : `Unfollowed @${actorUsername}`);
+            }
+        }
+    } catch (err) {
+        console.error('Follow back error:', err);
+        btn.innerText = originalText;
+        if (typeof Toast !== 'undefined') Toast.error('Failed to follow');
+    } finally {
+        btn.disabled = false;
+    }
+};
+
+function renderNotifications(notifications) {
     const container = document.querySelector('#notificationsView .space-y-4');
     if (!container) return;
 
     if (!notifications || notifications.length === 0) {
-        container.innerHTML = '<p class="text-center text-secondary py-8">No notifications yet.</p>';
+        container.innerHTML = '<p class="text-center text-secondary py-8">No notifications this week.</p>';
         return;
     }
 
-    container.innerHTML = notifications.map(n => {
-        const actorName = n.actor ? n.actor.username : 'Someone';
-        const actorAvatar = n.actor && n.actor.avatar_url ? n.actor.avatar_url : 'https://placehold.co/40x40';
-        let text = '';
-        let icon = '';
+    // Group by relative date
+    const grouped = {};
+    notifications.forEach(n => {
+        const relTime = GetRelativeTime(n.created_at);
+        if (!grouped[relTime]) grouped[relTime] = [];
+        grouped[relTime].push(n);
+    });
 
-        switch (n.type) {
-            case 'like': text = `liked your post.`; icon = '<i data-lucide="heart" class="w-4 h-4 text-red-500 fill-current"></i>'; break;
-            case 'follow': text = `started following you.`; icon = '<i data-lucide="user-plus" class="w-4 h-4 text-primary"></i>'; break;
-            case 'comment': text = `commented on your post.`; icon = '<i data-lucide="message-circle" class="w-4 h-4 text-blue-500"></i>'; break;
-            case 'mention': text = `mentioned you in a post.`; icon = '<i data-lucide="at-sign" class="w-4 h-4 text-orange-500"></i>'; break;
-            default: text = `interacted with you.`; icon = '<i data-lucide="bell" class="w-4 h-4 text-secondary"></i>';
-        }
+    let html = '';
 
-        return `
-            <div class="flex items-center justify-between p-4 bg-surface rounded-xl border border-app hover:bg-hover-bg transition-colors">
-                <div class="flex items-center space-x-4">
-                    <div class="relative">
-                        <img src="${actorAvatar}" class="w-10 h-10 rounded-full object-cover">
-                        <div class="absolute -bottom-1 -right-1 bg-surface rounded-full p-0.5 border border-app">
-                            ${icon}
+    for (const [dateGroup, notifs] of Object.entries(grouped)) {
+        html += `<div class="mb-4">
+            <h3 class="text-xs font-bold text-secondary uppercase tracking-wider mb-2 px-1">${dateGroup}</h3>
+            <div class="space-y-2">`;
+
+        notifs.forEach(n => {
+            const actorName = n.actor ? n.actor.username : 'Someone';
+            const actorId = n.actor ? n.actor.id : '';
+            const actorAvatar = n.actor && n.actor.avatar_url ? n.actor.avatar_url : 'https://placehold.co/40x40';
+            let text = '';
+            let icon = '';
+            let actionBtn = '';
+
+            switch (n.type) {
+                case 'like':
+                    text = `liked your post.`;
+                    icon = '<i data-lucide="heart" class="w-4 h-4 text-red-500 fill-current"></i>';
+                    break;
+                case 'follow':
+                    text = `started following you.`;
+                    icon = '<i data-lucide="user-plus" class="w-4 h-4 text-primary"></i>';
+                    actionBtn = `<button onclick="FollowBack(event, '${actorId}', '${actorName}')" class="px-3 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity">Follow Back</button>`;
+                    break;
+                case 'comment':
+                    text = `commented on your post.`;
+                    icon = '<i data-lucide="message-circle" class="w-4 h-4 text-blue-500"></i>';
+                    break;
+                case 'mention':
+                    text = `mentioned you.`;
+                    icon = '<i data-lucide="at-sign" class="w-4 h-4 text-orange-500"></i>';
+                    break;
+                case 'repost':
+                    text = `reposted your post.`;
+                    icon = '<i data-lucide="repeat" class="w-4 h-4 text-green-500"></i>';
+                    break;
+                case 'reply':
+                    text = `replied to your comment.`;
+                    icon = '<i data-lucide="corner-down-right" class="w-4 h-4 text-purple-500"></i>';
+                    break;
+                default:
+                    text = `interacted with you.`;
+                    icon = '<i data-lucide="bell" class="w-4 h-4 text-secondary"></i>';
+            }
+
+            const time = new Date(n.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+            html += `
+                <div onclick="HandleNotificationClick('${n.type}', '${n.post_id || ''}', '${actorName}')" 
+                     class="flex items-center justify-between p-3 bg-surface rounded-xl border border-app hover:bg-hover-bg transition-colors cursor-pointer ${!n.read ? 'border-l-4 border-l-primary' : ''}">
+                    <div class="flex items-center space-x-3 flex-1 min-w-0">
+                        <div class="relative shrink-0">
+                            <img src="${actorAvatar}" class="w-10 h-10 rounded-full object-cover cursor-pointer" onclick="event.stopPropagation(); loadPublicProfile('${actorName}')">
+                            <div class="absolute -bottom-1 -right-1 bg-surface rounded-full p-0.5 border border-app">
+                                ${icon}
+                            </div>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-sm text-main">
+                                <span class="font-bold cursor-pointer hover:underline" onclick="event.stopPropagation(); loadPublicProfile('${actorName}')">${actorName}</span> ${text}
+                            </p>
+                            <p class="text-xs text-secondary">${time}</p>
                         </div>
                     </div>
-                    <div>
-                        <p class="text-sm text-main"><span class="font-bold">${actorName}</span> ${text}</p>
-                        <p class="text-xs text-secondary">${new Date(n.created_at).toLocaleDateString()}</p>
+                    <div class="flex items-center gap-2 shrink-0">
+                        ${actionBtn}
+                        ${!n.read ? '<div class="w-2 h-2 bg-primary rounded-full"></div>' : ''}
                     </div>
                 </div>
-                ${!n.read ? '<div class="w-2 h-2 bg-primary rounded-full"></div>' : ''}
-            </div>
-        `;
-    }).join('');
+            `;
+        });
 
+        html += '</div></div>';
+    }
+
+    container.innerHTML = html;
     lucide.createIcons();
 }
 

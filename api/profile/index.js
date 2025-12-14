@@ -29,6 +29,18 @@ router.get('/posts/:id/comments', authMiddleware, profile.getComments);
 // POST /api/posts/:id/comments
 router.post('/posts/:id/comments', authMiddleware, profile.createComment);
 
+// PUT /api/posts/:id - Edit Post
+router.put('/posts/:id', authMiddleware, profile.UpdatePost);
+
+// DELETE /api/posts/:id - Delete Post
+router.delete('/posts/:id', authMiddleware, profile.DeletePost);
+
+// PUT /api/comments/:id - Edit Comment
+router.put('/comments/:id', authMiddleware, profile.UpdateComment);
+
+// DELETE /api/comments/:id - Delete Comment
+router.delete('/comments/:id', authMiddleware, profile.DeleteComment);
+
 // --- Stories ---
 // GET /api/stories - Fetch Active Stories
 router.get('/stories', authMiddleware, profile.getActiveStories);
@@ -48,6 +60,12 @@ router.put('/profile', authMiddleware, upload.single('avatar'), profile.updatePr
 
 // GET /api/profile/posts
 router.get('/profile/posts', authMiddleware, profile.getMyPosts);
+
+// GET /api/profile/bookmarks - Get user's saved/bookmarked posts
+router.get('/profile/bookmarks', authMiddleware, profile.getBookmarkedPosts);
+
+// GET /api/profile/tagged - Get posts where user is mentioned
+router.get('/profile/tagged', authMiddleware, profile.getTaggedPosts);
 
 // GET /api/profile/stories
 router.get('/profile/stories', authMiddleware, profile.getMyStories);

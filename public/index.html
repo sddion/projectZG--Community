@@ -100,9 +100,9 @@
                     <!-- Stories Section -->
                     <div class="bg-surface p-4 rounded-xl shadow-md transition-colors duration-300 border border-app overflow-hidden">
                         <div class="flex justify-between items-center mb-4 border-b border-app pb-2">
-                            <div class="flex space-x-4">
-                                <button class="font-semibold text-primary border-b-2 border-primary pb-1 transition-colors duration-200">Following</button>
-                                <button class="text-secondary hover:text-primary pb-1 transition-colors duration-200">All</button>
+                            <div class="flex space-x-4" id="feed-filter-tabs">
+                                <button onclick="SwitchFeedFilter('following')" class="feed-tab font-semibold text-primary border-b-2 border-primary pb-1 transition-colors duration-200">Following</button>
+                                <button onclick="SwitchFeedFilter('all')" class="feed-tab text-secondary hover:text-primary pb-1 transition-colors duration-200">All</button>
                             </div>
                         </div>
                         
@@ -225,9 +225,9 @@
 
                             <!-- Tabs -->
                             <div class="flex justify-around w-full border-b border-app mt-8">
-                                <button class="profile-tab py-3 text-primary border-b-2 border-primary font-semibold transition-colors duration-200">My Posts</button>
-                                <button class="profile-tab py-3 text-secondary hover:text-primary transition-colors duration-200">Saved</button>
-                                <button class="profile-tab py-3 text-secondary hover:text-primary transition-colors duration-200">Tagged</button>
+                                <button onclick="SwitchProfileTab('posts')" class="profile-tab py-3 text-primary border-b-2 border-primary font-semibold transition-colors duration-200">Posts</button>
+                                <button onclick="SwitchProfileTab('saved')" class="profile-tab py-3 text-secondary hover:text-primary transition-colors duration-200">Saved</button>
+                                <button onclick="SwitchProfileTab('tagged')" class="profile-tab py-3 text-secondary hover:text-primary transition-colors duration-200">Tagged</button>
                             </div>
 
                             <!-- Post Grid -->
@@ -460,6 +460,106 @@
             </div>
 
         </div>
+        </div>
+    </div>
+
+    <!-- Edit Post Modal -->
+    <div id="editPostModal" class="modal-backdrop">
+        <div class="bg-surface rounded-xl shadow-xl w-full max-w-md m-auto transition-colors duration-300 border border-app">
+            
+            <!-- Modal Header -->
+            <div class="p-6 border-b border-app flex justify-between items-center">
+                <h3 class="text-xl font-bold text-main">Edit Post</h3>
+                <button onclick="hideModal('editPostModal')" class="text-secondary hover:text-main">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-6 space-y-4">
+                <input type="hidden" id="edit-post-id" value="">
+                <textarea id="edit-post-content" placeholder="What's on your mind?" rows="6" class="w-full p-3 border border-app rounded-lg resize-none text-base focus:ring-2 focus:ring-primary focus:border-primary bg-surface text-main"></textarea>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-6 pt-0 flex gap-3">
+                <button onclick="hideModal('editPostModal')" class="flex-1 py-3 border border-app text-main font-semibold rounded-xl hover:bg-hover-bg transition-colors duration-200">
+                    Cancel
+                </button>
+                <button onclick="EditPost()" class="flex-1 py-3 bg-primary text-white font-semibold rounded-xl hover:opacity-90 transition-opacity duration-200">
+                    Save Changes
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Comments Modal -->
+    <div id="commentsModal" class="modal-backdrop">
+        <div class="bg-surface rounded-t-2xl md:rounded-xl shadow-xl w-full md:max-w-2xl md:m-auto transition-colors duration-300 border border-app flex flex-col h-[85vh] md:h-[90vh] md:max-h-[800px] fixed bottom-0 left-0 right-0 md:static">
+            <input type="hidden" id="comments-post-id" value="">
+            <input type="hidden" id="comments-parent-id" value="">
+            
+            <!-- Modal Header -->
+            <div class="p-4 border-b border-app flex justify-between items-center shrink-0">
+                <h3 class="text-lg font-bold text-main">Comments</h3>
+                <button onclick="hideModal('commentsModal')" class="text-secondary hover:text-main p-1 rounded-full hover:bg-hover-bg transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <!-- Comments List (Scrollable) -->
+            <div id="comments-list" class="flex-1 overflow-y-auto p-3 space-y-1">
+                <p class="text-center text-secondary py-8">No comments yet. Be the first!</p>
+            </div>
+
+            <!-- Comment Input -->
+            <div class="p-4 border-t border-app shrink-0 bg-surface">
+                <!-- Reply Indicator -->
+                <div id="reply-indicator" class="hidden mb-2 px-2 py-1 bg-hover-bg rounded-lg items-center justify-between"></div>
+                
+                <div class="flex gap-2">
+                    <div class="flex-1 relative">
+                        <input type="text" id="comment-input" placeholder="Write a comment..." class="w-full p-3 pr-10 border border-app rounded-xl bg-bg text-main focus:ring-2 focus:ring-primary focus:border-primary text-sm">
+                        <button onclick="InsertMention()" class="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary">
+                            <i data-lucide="at-sign" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <button onclick="SubmitComment()" class="px-4 py-2 bg-primary text-white font-semibold rounded-xl hover:opacity-90 transition-opacity text-sm">
+                        Post
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Comment Modal -->
+    <div id="editCommentModal" class="modal-backdrop">
+        <div class="bg-surface rounded-xl shadow-xl w-full max-w-sm m-auto transition-colors duration-300 border border-app">
+            <input type="hidden" id="edit-comment-id" value="">
+            
+            <!-- Modal Header -->
+            <div class="p-4 border-b border-app flex justify-between items-center">
+                <h3 class="text-lg font-bold text-main">Edit Comment</h3>
+                <button onclick="hideModal('editCommentModal')" class="text-secondary hover:text-main">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-4">
+                <textarea id="edit-comment-content" placeholder="Edit your comment..." rows="3" class="w-full p-3 border border-app rounded-lg resize-none text-sm focus:ring-2 focus:ring-primary focus:border-primary bg-surface text-main"></textarea>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 pt-0 flex gap-2">
+                <button onclick="hideModal('editCommentModal')" class="flex-1 py-2 border border-app text-main font-medium rounded-xl hover:bg-hover-bg transition-colors text-sm">
+                    Cancel
+                </button>
+                <button onclick="EditComment()" class="flex-1 py-2 bg-primary text-white font-medium rounded-xl hover:opacity-90 transition-opacity text-sm">
+                    Save
+                </button>
+            </div>
         </div>
     </div>
 
