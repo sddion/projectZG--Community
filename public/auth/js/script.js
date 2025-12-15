@@ -189,6 +189,46 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-back-verify')?.addEventListener('click', window.showLogin);
     document.getElementById('btn-back-reset')?.addEventListener('click', window.showLogin);
 
+    // --- RESET PASSWORD REQUEST ---
+    const btnResetRequest = document.getElementById('btn-reset-request');
+    if (btnResetRequest) {
+        btnResetRequest.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = getVal('reset-email');
+
+            if (!email) return showToast('warning', "Please enter your email", "Error");
+
+            btnResetRequest.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            btnResetRequest.disabled = true;
+
+            try {
+                const res = await fetch(`${API_URL}/auth/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    showToast('success', "Check your email for the reset link", "Link Sent");
+                    // Optional: Switch to a "check email" view or just stay here
+                } else {
+                    // 429 warnings are common here
+                    if (res.status === 429) {
+                        showToast('warning', data.message || "Too many attempts", "Slow Down");
+                    } else {
+                        throw new Error(data.error || "Failed to send reset link");
+                    }
+                }
+            } catch (err) {
+                showToast('error', err.message, "Error");
+            } finally {
+                btnResetRequest.innerHTML = 'Send Reset Link';
+                btnResetRequest.disabled = false;
+            }
+        });
+    }
+
 
     // --- SIGN UP ---
     const btnSignup = document.getElementById('btn-signup');

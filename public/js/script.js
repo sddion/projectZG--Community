@@ -1551,9 +1551,20 @@ async function toggleFollow(btn, userId) {
 }
 
 // Load "My" Profile (Nav Handler)
+// Load "My" Profile (Nav Handler)
 async function loadMyProfile() {
+    // If not currently logged in, but we have a token, we might be reloading.
+    // Wait for the initial profile fetch to complete if it hasn't.
     if (!currentUser) {
-        // If not logged in, show auth modal
+        const hasToken = document.cookie.includes('sb-access-token');
+        if (hasToken) {
+            // Try to fetch or wait (basic retry)
+            await fetchProfile();
+        }
+    }
+
+    if (!currentUser) {
+        // If still not logged in, show auth modal
         showModal('authModal');
         return;
     }
