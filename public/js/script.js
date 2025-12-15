@@ -1551,16 +1551,13 @@ async function toggleFollow(btn, userId) {
 }
 
 // Load "My" Profile (Nav Handler)
-// Load "My" Profile (Nav Handler)
 async function loadMyProfile() {
     // If not currently logged in, but we have a token, we might be reloading.
     // Wait for the initial profile fetch to complete if it hasn't.
     if (!currentUser) {
-        const hasToken = document.cookie.includes('sb-access-token');
-        if (hasToken) {
-            // Try to fetch or wait (basic retry)
-            await fetchProfile();
-        }
+        // Attempt to fetch profile regardless of document.cookie visibility
+        // as HttpOnly cookies might be present or client-side cookie access might be restricted.
+        await fetchProfile();
     }
 
     if (!currentUser) {
