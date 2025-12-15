@@ -137,3 +137,6 @@ vite.config.ts.timestamp-*
 .vite/
 .env
 
+.vercel
+.env*.local
+.env.prod

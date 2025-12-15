@@ -27,7 +27,14 @@ exports.getProfile = async (req, res) => {
         res.json({ profile });
     } catch (err) {
         console.error('Profile Fetch Error:', err);
-        res.status(500).json({ error: 'Failed to fetch profile' });
+        // Temporary Debug: Return error details to client to see what's happening in Vercel
+        const { supabaseAdmin } = require('../utils/supabaseClient');
+        res.status(500).json({
+            error: 'Failed to fetch profile',
+            details: err.message,
+            hint: err.hint || 'No hint',
+            usingAdmin: !!supabaseAdmin
+        });
     }
 };
 

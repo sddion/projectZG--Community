@@ -124,7 +124,6 @@ async function uploadToImageKit(file) {
         if (!res.ok) throw new Error('Failed to fetch auth params');
         authParams = await res.json();
     } catch (e) {
-        console.error('[DEBUG] Auth Fetch Error:', e);
         throw new Error('Could not authenticate upload');
     }
 
@@ -138,7 +137,6 @@ async function uploadToImageKit(file) {
             expire: authParams.expire
         }, function (err, result) {
             if (err) {
-                console.error('[DEBUG] SDK Upload Error:', err);
                 reject(err);
             }
             else resolve(result.url);
