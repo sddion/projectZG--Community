@@ -1,13 +1,14 @@
-const { supabase, createAuthenticatedClient } = require('../utils/supabaseClient');
+const { supabase , supabaseAdmin, createAuthenticatedClient } = require('../utils/supabaseClient');
 
 // Get authenticated user's profile
 exports.getProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Use Admin client for own profile to bypass RLS/Permission weirdness on "public" profiles table
-        // if the user is already authenticated via middleware.
-        const { supabaseAdmin, supabase } = require('../utils/supabaseClient');
+        if (!supabaseAdmin) {
+            console.warn('[Profile] Warning: SUPABASE_SERVICE_ROLE_KEY missing. Using anonymous client for profile fetch (may fail RLS).');
+        }
+
         const client = supabaseAdmin || supabase;
 
         let { data: profile, error } = await client
