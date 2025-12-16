@@ -209,10 +209,10 @@
                                     
                                     <!-- Actions (Moved here for desktop) -->
                                     <div id="profile-actions" class="flex items-center justify-center md:justify-start space-x-3 mt-4 md:mt-0">
-                                        <button onclick="showModal('editProfileModal')" class="py-2 px-6 glass-button text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity duration-200">
+                                        <button onclick="showModal('editProfileModal')" class="py-2 px-4 glass-button text-white text-xs md:text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity duration-200">
                                             Edit Profile
                                         </button>
-                                        <button class="p-2 glass-button-secondary text-main rounded-lg hover:bg-white/10 transition-colors duration-200" title="Share">
+                                        <button onclick="shareProfile(document.getElementById('profile-display-username').textContent.replace('@', ''))" class="p-2 glass-button-secondary text-main rounded-lg hover:bg-white/10 transition-colors duration-200" title="Share">
                                             <i data-lucide="share-2" class="w-5 h-5"></i>
                                         </button>
                                     </div>

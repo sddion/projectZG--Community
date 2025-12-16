@@ -1,10 +1,10 @@
-const { supabase , supabaseAdmin, createAuthenticatedClient } = require('../utils/supabaseClient');
+const { supabase, supabaseAdmin, createAuthenticatedClient } = require('../utils/supabaseClient');
 
 // Get authenticated user's profile
 exports.getProfile = async (req, res) => {
     try {
+        const { supabaseAdmin } = require('../utils/supabaseClient');
         const userId = req.user.id;
-
         if (!supabaseAdmin) {
             console.warn('[Profile] Warning: SUPABASE_SERVICE_ROLE_KEY missing. Using anonymous client for profile fetch (may fail RLS).');
         }
@@ -27,14 +27,6 @@ exports.getProfile = async (req, res) => {
         res.json({ profile });
     } catch (err) {
         console.error('Profile Fetch Error:', err);
-        // Temporary Debug: Return error details to client to see what's happening in Vercel
-        const { supabaseAdmin } = require('../utils/supabaseClient');
-        res.status(500).json({
-            error: 'Failed to fetch profile',
-            details: err.message,
-            hint: err.hint || 'No hint',
-            usingAdmin: !!supabaseAdmin
-        });
     }
 };
 

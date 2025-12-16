@@ -4,6 +4,7 @@ lucide.createIcons();
 let currentPage = 'feed';
 const body = document.body;
 
+
 // --- Theme Management ---
 function getPreferredTheme() {
     const savedTheme = localStorage.getItem('theme');
@@ -111,6 +112,8 @@ function getHeaders() {
         'Authorization': token ? `Bearer ${token}` : ''
     };
 }
+
+
 
 // --- ImageKit Helper ---
 async function uploadToImageKit(file) {
@@ -1496,7 +1499,12 @@ async function fetchProfile() {
             console.warn('[DEBUG] fetchProfile Failed:', response.status); // DEBUG
         }
     } catch (err) {
-        console.error('Error loading profile:', err);
+        console.error('Error loading posts:', err);
+    }
+
+    // Re-initialize icons for the newly injected HTML
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
     }
 }
 
@@ -1711,11 +1719,11 @@ async function renderProfileView(profile, isOwnProfile) {
     if (actionsContainer) {
         if (isOwnProfile) {
             actionsContainer.innerHTML = `
-                <button onclick="showModal('editProfileModal')" class="flex-1 py-2 glass-button text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity duration-200">
+                <button onclick="showModal('editProfileModal')" class="flex-1 py-3 px-6 glass-button text-white text-sm font-semibold tracking-wide rounded-lg hover:opacity-90 transition-opacity duration-200">
                     Edit Profile
                 </button>
-                <button onclick="shareProfile('${profile.username}')" class="p-2 glass-button-secondary text-main rounded-lg hover:bg-white/10 transition-colors duration-200" title="Share">
-                    <i data-lucide="share-2" class="w-5 h-5"></i>
+                <button onclick="shareProfile(this.dataset.username)" data-username="${profile.username}" class="relative z-10 p-3 glass-button-secondary text-main rounded-lg hover:bg-white/10 transition-colors duration-200" title="Share">
+                    <i data-lucide="share-2" class="w-5 h-5 pointer-events-none"></i>
                 </button>
             `;
 
@@ -1749,17 +1757,17 @@ async function renderProfileView(profile, isOwnProfile) {
                     <button onclick="showModal('authModal')" class="flex-1 py-3 glass-button text-white font-semibold rounded-xl hover:opacity-90 transition-all duration-200">
                         Follow
                     </button>
-                    <button onclick="showModal('authModal')" class="py-3 px-6 glass-button-secondary text-main font-semibold rounded-xl hover:bg-white/10 transition-colors duration-200">
-                        Message
+                    <button onclick="shareProfile(this.dataset.username)" data-username="${profile.username}" class="relative z-10 p-2 glass-button-secondary text-main rounded-lg hover:bg-white/10 transition-colors duration-200" title="Share">
+                        <i data-lucide="share-2" class="w-5 h-5 pointer-events-none"></i>
                     </button>
                 `;
             } else {
                 actionsContainer.innerHTML = `
-                    <button onclick="toggleFollow(this, '${profile.id}')" class="flex-1 py-3 font-semibold rounded-xl hover:opacity-90 transition-all duration-200 ${followBtnClass}">
+                    <button onclick="toggleFollow(this, '${profile.id}')" class="flex-1 py-3 px-6 font-semibold tracking-wide rounded-xl hover:opacity-90 transition-all duration-200 ${followBtnClass}">
                         ${followBtnText}
                     </button>
-                    <button class="py-3 px-6 glass-button-secondary text-main font-semibold rounded-xl hover:bg-white/10 transition-colors duration-200">
-                        Message
+                    <button onclick="shareProfile(this.dataset.username)" data-username="${profile.username}" class="relative z-10 p-3 glass-button-secondary text-main rounded-lg hover:bg-white/10 transition-colors duration-200" title="Share">
+                        <i data-lucide="share-2" class="w-5 h-5 pointer-events-none"></i>
                     </button>
                 `;
             }
@@ -1814,6 +1822,11 @@ async function renderProfileView(profile, isOwnProfile) {
     } catch (err) {
         console.error('Error fetching profile posts:', err);
         if (grid) grid.innerHTML = '<div class="col-span-3 text-center py-4 text-xs text-secondary">Failed to load posts</div>';
+    }
+
+    // Re-initialize icons for the newly injected HTML
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
     }
 }
 
@@ -2475,109 +2488,26 @@ function initCookieConsent() {
     // Check if already consented
     if (localStorage.getItem('cookie_consent') === 'true') return;
 
-    // Create Styles
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .cookie-consent-overlay {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%) translateY(150%);
-            width: 90%;
-            max-width: 500px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-            z-index: 99999;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-            font-family: 'Inter', sans-serif;
-            color: #fff; /* Default to white for contrast on glass */
-        }
-        
-        /* Dark/Light mode adaptation */
-        [data-theme="light"] .cookie-consent-overlay {
-            background: rgba(255, 255, 255, 0.8);
-            border: 1px solid rgba(0,0,0,0.05);
-            color: #1e293b;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        }
-
-        .cookie-consent-overlay.active {
-            transform: translateX(-50%) translateY(0);
-        }
-
-        .cc-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 18px;
-            font-weight: 700;
-        }
-
-        .cc-body {
-            font-size: 14px;
-            line-height: 1.5;
-            opacity: 0.9;
-        }
-
-        .cc-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
-        }
-
-        .cc-btn {
-            flex: 1;
-            padding: 12px;
-            border-radius: 12px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .cc-btn-accept {
-            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-            color: white;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-        }
-        .cc-btn-accept:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
-        }
-
-        .cc-btn-decline {
-            background: rgba(128, 128, 128, 0.1);
-            color: inherit;
-        }
-        .cc-btn-decline:hover {
-            background: rgba(128, 128, 128, 0.2);
-        }`;
-    document.head.appendChild(style);
-
     // Create Elements
     const container = document.createElement('div');
-    container.className = 'cookie-consent-overlay';
+    const baseClasses = "fixed bottom-5 left-1/2 -translate-x-1/2 translate-y-[150%] w-[90%] max-w-[500px] z-[99999] flex flex-col gap-4 p-6 rounded-[20px] shadow-2xl transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] font-sans";
+    const themeClasses = "bg-white/10 backdrop-blur-xl border border-white/20 text-white " +
+        "[body[data-theme='light']_&]:bg-white/80 [body[data-theme='light']_&]:border-black/5 [body[data-theme='light']_&]:text-slate-800 [body[data-theme='light']_&]:shadow-xl";
+
+    container.className = `${baseClasses} ${themeClasses}`;
 
     container.innerHTML = `
-        <div class="cc-header">
+        <div class="flex items-center gap-3 text-lg font-bold">
             <i data-lucide="cookie" class="w-6 h-6 text-primary"></i>
             <span>We use cookies</span>
         </div>
-        <div class="cc-body">
+        <div class="text-sm opacity-90 leading-relaxed">
             We use cookies to enhance your experience, keep you logged in, and analyze traffic. 
             By continuing, you agree to our use of cookies.
         </div>
-        <div class="cc-actions">
-            <button class="cc-btn cc-btn-decline" id="cc-decline">Decline</button>
-            <button class="cc-btn cc-btn-accept" id="cc-accept">Accept All</button>
+        <div class="flex gap-3 mt-2">
+            <button class="flex-1 py-3 font-bold rounded-xl transition-all bg-gray-500/10 hover:bg-gray-500/20 text-current" id="cc-decline">Decline</button>
+            <button class="flex-1 py-3 font-bold rounded-xl transition-all text-white bg-linear-to-br from-indigo-500 to-indigo-600 shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/40 hover:-translate-y-0.5" id="cc-accept">Accept All</button>
         </div>
     `;
 
@@ -2596,7 +2526,9 @@ function initCookieConsent() {
 
     // Animate In
     setTimeout(() => {
-        container.classList.add('active');
+        // Toggle transform to slide in (reset translate-y)
+        container.classList.remove('translate-y-[150%]');
+        container.classList.add('translate-y-0');
     }, 1000);
 
     // Handlers
@@ -2701,17 +2633,6 @@ async function performSearch(query) {
         const hashtags = Array.isArray(data.hashtags) ? data.hashtags : [];
 
         if (users.length === 0 && hashtags.length === 0) {
-            // Simulate "No results" vs Mock Data decision
-            // For this task, we want to SHOW mock data if real search returns nothing
-            // to prevent "infinite loading" feeling or empty states during dev.
-            // However, usually "No results" is correct. 
-            // BUT user explicitly asked for "mock data" instead of infinite loading.
-            // So if API returns empty, we might want mock data? 
-            // actually user said "fix why in search it is showinga infinti loadin scroll instead of mock data"
-            // This implies they EXPECTED mock data but got infinite loading (likely due to error/hanging).
-            // I will simply render what I have. If empty, I'll render Empty State. 
-            // But I will add MOCK DATA in the catch block for robustness.
-
             resultsContainer.innerHTML = `
                 <div class="text-center py-10 text-secondary">
                     <p>No results found for "${query}"</p>
@@ -2729,8 +2650,6 @@ async function performSearch(query) {
         renderSearchResults(mockData.users, mockData.hashtags, query);
 
         if (typeof Toast !== 'undefined') {
-            // Optional: Notify user it's mock data
-            // Toast.info("Showing offline/mock results");
         }
     }
 }
@@ -2825,10 +2744,30 @@ window.onload = async () => {
 
 window.shareProfile = (username) => {
     const url = `${window.location.origin}/?user=${username}`;
-    navigator.clipboard.writeText(url).then(() => {
-        if (typeof Toast !== 'undefined') Toast.success("Profile link copied!");
-    }).catch(err => {
-        console.error('Failed to copy: ', err);
-        if (typeof Toast !== 'undefined') Toast.error("Failed to copy link.");
-    });
+
+    // Robust Copy Function
+    const copyToClipboard = async (text) => {
+        // 1. Try Modern API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                if (typeof Toast !== 'undefined') Toast.success("Profile link copied!");
+                return;
+            } catch (err) {
+                console.warn("Clipboard API failed, trying fallback...", err);
+            }
+        }
+
+        // 2. Fallback: Prompt for manual copy (most reliable across all browsers/contexts)
+        try {
+            window.prompt("Copy link:", text);
+        } catch (e) {
+            console.error("Prompt failed:", e);
+            if (typeof Toast !== 'undefined') Toast.error("Failed to copy link");
+        }
+    };
+
+    copyToClipboard(url);
 };
+
+
